@@ -66,7 +66,7 @@ struct ContentView: View {
                     }
                 }
             } else {
-                let effectiveLinks = shouldIncludeReadItems ? links : unreadLinks
+                let effectiveLinks = getEffectiveLinks()
                 Text("Pickpocket").font(.title).bold()
                 List(effectiveLinks, id: \.self.url) { link in
                     VStack(alignment: .leading) {
@@ -80,7 +80,7 @@ struct ContentView: View {
                     .listStyle(.plain)
                 if isAddingLinks {
                     VStack {
-                        ProgressView("Adding to Reading List", value: Float(addedCount + failedCount), total: Float(links.count))
+                        ProgressView("Adding to Reading List", value: Float(addedCount + failedCount), total: Float(getEffectiveLinks().count))
                         Text("Added: \(addedCount) / Failed: \(failedCount)")
                     }
                     .padding()
@@ -91,13 +91,7 @@ struct ContentView: View {
                         .frame(minWidth: 0, maxWidth: 250)
                     Button("Add \(effectiveLinks.count) Links to Reading List") {
                         isAddingLinks = true
-                        if (ProcessInfo.processInfo.isiOSAppOnMac) {
-                            print("Running on macOS. Adding all links at once.")
-                            processAllLinks()
-                        } else {
-                            print("Running on iOS; need user interaction. Adding links one by one.")
-                            processNextLink()
-                        }
+                        processNextLink()
                     }
                         .padding()
                         .padding(.top, -10)
@@ -111,13 +105,15 @@ struct ContentView: View {
             if oldPhase == .inactive && newPhase == .active && !ProcessInfo.processInfo.isiOSAppOnMac && isAddingLinks {
                 processNextLink()
             }
-        }.alert(isPresented: $showingAlert) {
+        }
+        .alert(isPresented: $showingAlert) {
             Alert(
                 title: Text(alertTitle),
                 message: Text(alertMessage),
                 dismissButton: .default(Text("OK"))
             )
         }
+        .preferredColorScheme(.light)
     }
 
     func loadAndParseHTML(fileURL: URL) {
@@ -170,7 +166,7 @@ struct ContentView: View {
     }
 
     func processNextLink() {
-        let effectiveLinks = shouldIncludeReadItems ? links : unreadLinks
+        let effectiveLinks = getEffectiveLinks()
         let index = effectiveLinks.count - (addedCount + failedCount) - 1
         if index < 0 {
             finishImport()
@@ -184,20 +180,10 @@ struct ContentView: View {
                 failedCount += 1
             }
         }
-    }
-
-    func processAllLinks() {
-        let effectiveLinks = shouldIncludeReadItems ? links : unreadLinks
-        if let list = SSReadingList.default() {
-            for link in effectiveLinks.reversed() {
-                if addToReadingList(list, link) {
-                    addedCount += 1
-                } else {
-                    failedCount += 1
-                }
-            }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            processNextLink()
         }
-        finishImport()
     }
 
     func showAlert(title: String, message: String) {
@@ -205,7 +191,11 @@ struct ContentView: View {
         alertMessage = message
         showingAlert = true
     }
-    
+
+    func getEffectiveLinks() -> [URLTitlePair] {
+        return shouldIncludeReadItems ? links : unreadLinks
+    }
+
     func finishImport() {
         showAlert(title: "Import Complete", message: "\(addedCount) links were successfully added to your Safari reading list.")
         isAddingLinks = false
