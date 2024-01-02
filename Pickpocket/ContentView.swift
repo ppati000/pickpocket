@@ -44,7 +44,7 @@ struct ContentView: View {
                     .aspectRatio(contentMode: .fit)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
-                Text("Pickpocket import your saved links from Pocket to your Safari reading list. Just follow the instructions below!")
+                Text("Pickpocket imports your saved links from Pocket to your Safari reading list. Just follow the instructions below!")
                     .padding()
                 Text("1. Download your Pocket export file").font(.headline)
                     .padding(.vertical, -5)
@@ -67,7 +67,9 @@ struct ContentView: View {
                 }
             } else {
                 let effectiveLinks = getEffectiveLinks()
+                #if !targetEnvironment(macCatalyst)
                 Text("Pickpocket").font(.title).bold()
+                #endif
                 List(effectiveLinks, id: \.self.url) { link in
                     VStack(alignment: .leading) {
                         Text(link.title ?? "Untitled Link")
@@ -102,9 +104,12 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(red: 240/255, green: 245/255, blue: 250/255))
         .onChange(of: scenePhase) { oldPhase, newPhase in
-            if oldPhase == .inactive && newPhase == .active && !ProcessInfo.processInfo.isiOSAppOnMac && isAddingLinks {
+            #if !targetEnvironment(macCatalyst)
+            // Process next link when the user has confirmed the system popup.
+            if oldPhase == .inactive && newPhase == .active && isAddingLinks {
                 processNextLink()
             }
+            #endif
         }
         .alert(isPresented: $showingAlert) {
             Alert(
@@ -180,10 +185,15 @@ struct ContentView: View {
                 failedCount += 1
             }
         }
-        
+
+        // User needs to confirm reading list on iOS.
+        // On macOS, we can add links without confirmation one by one.
+        // Still need a delay though, otherwise the order is messed up.
+        #if targetEnvironment(macCatalyst)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             processNextLink()
         }
+        #endif
     }
 
     func showAlert(title: String, message: String) {
